@@ -5,6 +5,36 @@ import { Button } from '@/components/ui/Button';
 import { ArrowRight, Calendar, Tag } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+const AUTHORS = {
+  alex: {
+    name: "Alex Mercer",
+    role: "Security Researcher",
+    bio: "A cryptography researcher and security engineer exploring the intersection of privacy, human behavior, and digital defense. With over 12 years in information security.",
+    avatar: "https://i.pravatar.cc/150?img=12",
+    twitter: "https://twitter.com",
+    linkedin: "https://linkedin.com",
+    github: "https://github.com",
+  },
+  sarah: {
+    name: "Sarah Chen",
+    role: "Cybersecurity Analyst",
+    bio: "A threat intelligence analyst and privacy advocate focused on making enterprise-grade security accessible to everyday users. Former CISA consultant.",
+    avatar: "https://i.pravatar.cc/150?img=47",
+    twitter: "https://twitter.com",
+    linkedin: "https://linkedin.com",
+    github: "https://github.com",
+  },
+  marcus: {
+    name: "Marcus Webb",
+    role: "Infrastructure Engineer",
+    bio: "A systems engineer specializing in hash functions, PKI, and zero-trust architectures. Currently building open-source cryptographic tooling for developers.",
+    avatar: "https://i.pravatar.cc/150?img=68",
+    twitter: "https://twitter.com",
+    linkedin: "https://linkedin.com",
+    github: "https://github.com",
+  },
+};
+
 export const POSTS = [
   {
     slug: 'what-makes-a-strong-password',
@@ -14,6 +44,7 @@ export const POSTS = [
     date: "Oct 12, 2024",
     readTime: "5 min read",
     image: "1526374965328-7f61d4dc18c5",
+    author: AUTHORS.alex,
     content: `
 A strong password is your first line of defense. But what does "strong" actually mean from a mathematical perspective?
 
@@ -66,6 +97,7 @@ Use our Password Generator to create cryptographically random passwords or passp
     date: "Nov 05, 2024",
     readTime: "6 min read",
     image: "1550751827438-b11fac37e290",
+    author: AUTHORS.marcus,
     content: `
 SHA-256 (Secure Hash Algorithm 256-bit) is one of the most important cryptographic tools in existence today. It underpins Bitcoin, TLS certificates, software signing, and much more.
 
@@ -112,6 +144,7 @@ Use our Hash Generator to compute SHA-256 hashes instantly in your browser.
     date: "Dec 01, 2024",
     readTime: "4 min read",
     image: "1614064641983-42e128189c4e",
+    author: AUTHORS.sarah,
     content: `
 The average person has 100+ online accounts. The math is brutal: you simply cannot create and remember a unique, strong password for every service. Something has to give — and usually it's security.
 
@@ -152,6 +185,7 @@ Don't use a password manager? Our Password Generator creates strong, unique pass
     date: "Jan 15, 2025",
     readTime: "5 min read",
     image: "1510511459019-5efa7ae22baa",
+    author: AUTHORS.sarah,
     content: `
 In 2024 alone, over 17 billion records were exposed in data breaches. Your email and password are almost certainly in at least one leaked database. The only question is: how far does the damage spread?
 
@@ -199,6 +233,7 @@ Use our Password Generator right now to generate a unique, strong password for a
     date: "Feb 20, 2025",
     readTime: "4 min read",
     image: "1555949963-ff9fe0c870eb",
+    author: AUTHORS.alex,
     content: `
 The famous XKCD comic showed us something counterintuitive: four random common words strung together can be both easier to remember and harder to crack than a "complex" 8-character password.
 
@@ -249,6 +284,7 @@ Switch to Passphrase mode in our Password Generator to create a memorable, high-
     date: "Mar 10, 2025",
     readTime: "6 min read",
     image: "1504639725590-34d0984388bd",
+    author: AUTHORS.marcus,
     content: `
 MD5, SHA-1, and the SHA-2 family have played different roles in securing the internet. Understanding why some algorithms were deprecated and others remain trusted requires understanding what "broken" means in cryptography.
 
