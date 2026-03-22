@@ -1,0 +1,142 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: 'Inter', sans-serif;
+  --font-display: 'Poppins', sans-serif;
+
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+}
+
+:root {
+  /* LIGHT MODE (Fallback, but we prefer dark) */
+  --background: 210 40% 98%;
+  --foreground: 222 47% 11%;
+  
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  
+  /* Neon Green shifted for light mode */
+  --primary: 155 80% 40%;
+  --primary-foreground: 0 0% 100%;
+  
+  /* Neon Blue shifted for light mode */
+  --secondary: 190 90% 45%;
+  --secondary-foreground: 0 0% 100%;
+  
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 155 80% 40%;
+
+  --radius: 0.75rem;
+}
+
+.dark {
+  /* DARK MODE - The intended look */
+  --background: 225 30% 8%;
+  --foreground: 210 40% 98%;
+  
+  --card: 225 25% 12%;
+  --card-foreground: 210 40% 98%;
+  
+  --popover: 225 25% 12%;
+  --popover-foreground: 210 40% 98%;
+  
+  /* Vibrant Neon Green */
+  --primary: 155 100% 45%;
+  --primary-foreground: 225 30% 8%;
+  
+  /* Vibrant Neon Blue */
+  --secondary: 190 100% 50%;
+  --secondary-foreground: 225 30% 8%;
+  
+  --muted: 225 20% 20%;
+  --muted-foreground: 215 20.2% 65.1%;
+  
+  --accent: 225 25% 18%;
+  --accent-foreground: 210 40% 98%;
+  
+  --destructive: 0 62.8% 50.6%;
+  --destructive-foreground: 210 40% 98%;
+  
+  --border: 225 20% 20%;
+  --input: 225 25% 15%;
+  --ring: 155 100% 45%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased overflow-x-hidden;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    @apply tracking-tight;
+  }
+}
+
+/* Custom Scrollbar for a polished look */
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-background;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-muted rounded-full border-2 border-background;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground;
+}
+
+/* Range Slider Styling */
+input[type=range] {
+  -webkit-appearance: none;
+  @apply w-full h-2 rounded-full bg-muted outline-none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  @apply w-5 h-5 rounded-full bg-primary cursor-pointer border-2 border-background shadow-lg shadow-primary/50 transition-transform hover:scale-110;
+}
+input[type=range]::-moz-range-thumb {
+  @apply w-5 h-5 rounded-full bg-primary cursor-pointer border-2 border-background shadow-lg shadow-primary/50 transition-transform hover:scale-110;
+}
+
+/* Glassmorphism utility */
+.glass-panel {
+  @apply bg-card/60 backdrop-blur-xl border border-white/10 shadow-2xl;
+}

@@ -1,0 +1,15 @@
+packages:
+  "framer-motion": "For smooth page transitions and interactive element animations"
+  "crypto-js": "For generating MD5 hashes client-side"
+  "clsx": "For conditional tailwind classes"
+  "tailwind-merge": "For merging tailwind classes in reusable components"
+  "lucide-react": "For UI icons"
+
+images:
+  - path: "artifacts/safepasswordmaker/public/images/cyber-hero.png"
+    description: "Abstract dark futuristic cybersecurity background, deep navy with subtle glowing neon green and cyan geometric nodes, slightly blurred, perfect for a hero section backdrop"
+    aspect_ratio: "16:9"
+
+notes:
+  - "App is 100% client side. No API calls are made for tools."
+  - "Theme defaults to dark mode."
