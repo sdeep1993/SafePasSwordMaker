@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { postsTable, postTagsTable, tagsTable, categoriesTable, usersTable } from "@workspace/db/schema";
-import { eq, inArray } from "drizzle-orm";
-import { requireAuth } from "../middlewares/auth.js";
+import { eq, and } from "drizzle-orm";
+import { requireAuth, requireAdmin } from "../middlewares/auth.js";
 
 const router = Router();
 
@@ -30,8 +30,11 @@ async function getPostsWithMeta(where?: any) {
 
     let author = null;
     if (post.authorId) {
-      const [u] = await db.select({ id: usersTable.id, username: usersTable.username, email: usersTable.email, designation: usersTable.designation, profilePicture: usersTable.profilePicture })
-        .from(usersTable).where(eq(usersTable.id, post.authorId)).limit(1);
+      const [u] = await db.select({
+        id: usersTable.id, username: usersTable.username, email: usersTable.email,
+        firstName: usersTable.firstName, lastName: usersTable.lastName,
+        designation: usersTable.designation, profilePicture: usersTable.profilePicture
+      }).from(usersTable).where(eq(usersTable.id, post.authorId)).limit(1);
       author = u || null;
     }
 
@@ -40,10 +43,23 @@ async function getPostsWithMeta(where?: any) {
   return results;
 }
 
-// GET /api/posts
-router.get("/posts", async (_req, res) => {
+// GET /api/posts — public: only published + approved; admin: all
+router.get("/posts", async (req, res) => {
   try {
-    const posts = await getPostsWithMeta();
+    // Check if authenticated as admin
+    let isAdmin = false;
+    const auth = req.headers.authorization;
+    if (auth?.startsWith("Bearer ")) {
+      try {
+        const { verifyToken } = await import("../middlewares/auth.js");
+        const payload = verifyToken(auth.slice(7));
+        if (payload.role === "admin") isAdmin = true;
+      } catch {}
+    }
+
+    const posts = isAdmin
+      ? await getPostsWithMeta()
+      : await getPostsWithMeta(and(eq(postsTable.status, "published"), eq(postsTable.approved, true)));
     res.json(posts);
   } catch (err) {
     console.error(err);
@@ -51,11 +67,22 @@ router.get("/posts", async (_req, res) => {
   }
 });
 
-// GET /api/posts/:id
+// GET /api/posts/:id — public single post (by id or slug)
 router.get("/posts/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
     const posts = await getPostsWithMeta(eq(postsTable.id, id));
+    if (!posts[0]) { res.status(404).json({ error: "Post not found" }); return; }
+    res.json(posts[0]);
+  } catch {
+    res.status(500).json({ error: "Failed to fetch post" });
+  }
+});
+
+// GET /api/posts/by-slug/:slug — fetch post by slug
+router.get("/posts/by-slug/:slug", async (req, res) => {
+  try {
+    const posts = await getPostsWithMeta(eq(postsTable.slug, req.params.slug));
     if (!posts[0]) { res.status(404).json({ error: "Post not found" }); return; }
     res.json(posts[0]);
   } catch {
@@ -73,9 +100,12 @@ router.post("/posts", requireAuth, async (req, res) => {
   }
   try {
     const slug = toSlug(title);
+    // Admin posts are auto-approved; contributor posts need approval
+    const approved = authUser.role === "admin";
     const [post] = await db.insert(postsTable).values({
       title, slug, content, excerpt: excerpt || null, image: image || null,
       status: status || "draft",
+      approved,
       categoryId: categoryId || null,
       authorId: authUser.id,
       updatedAt: new Date(),
@@ -126,6 +156,20 @@ router.put("/posts/:id", requireAuth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to update post" });
+  }
+});
+
+// POST /api/posts/:id/approve — admin only
+router.post("/posts/:id/approve", requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    const [post] = await db.update(postsTable)
+      .set({ approved: true, updatedAt: new Date() })
+      .where(eq(postsTable.id, id)).returning();
+    if (!post) { res.status(404).json({ error: "Not found" }); return; }
+    res.json(post);
+  } catch {
+    res.status(500).json({ error: "Failed to approve post" });
   }
 });
 

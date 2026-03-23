@@ -8,6 +8,10 @@ export const usersTable = pgTable("users", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   role: text("role").notNull().default("contributor"), // 'admin' | 'contributor'
+  status: text("status").notNull().default("active"),  // 'pending' | 'active'
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  phone: text("phone"),
   summary: text("summary"),
   profilePicture: text("profile_picture"),
   designation: text("designation"),

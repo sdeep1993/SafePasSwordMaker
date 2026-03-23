@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, integer, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, timestamp, integer, primaryKey, boolean } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
 export const categoriesTable = pgTable("categories", {
@@ -22,6 +22,7 @@ export const postsTable = pgTable("posts", {
   content: text("content").notNull(),
   image: text("image"),
   status: text("status").notNull().default("draft"), // 'draft' | 'published'
+  approved: boolean("approved").notNull().default(false),
   categoryId: integer("category_id").references(() => categoriesTable.id),
   authorId: integer("author_id").references(() => usersTable.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),

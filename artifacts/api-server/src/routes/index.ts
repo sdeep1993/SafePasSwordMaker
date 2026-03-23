@@ -5,6 +5,7 @@ import categoriesRouter from "./categories.js";
 import tagsRouter from "./tags.js";
 import postsRouter from "./posts.js";
 import usersRouter from "./users.js";
+import seedRouter from "./seed.js";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(categoriesRouter);
 router.use(tagsRouter);
 router.use(postsRouter);
 router.use(usersRouter);
+router.use(seedRouter);
 
 export default router;

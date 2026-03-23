@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { Plus, Pencil, Trash2, Search, Loader2, Eye, EyeOff, AlertCircle } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Loader2, AlertCircle, CheckCircle2, Clock } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { Card } from "@/components/ui/Card";
 import { api } from "@/lib/api";
@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 
 interface Post {
-  id: number; title: string; slug: string; status: string; excerpt?: string;
+  id: number; title: string; slug: string; status: string; approved: boolean; excerpt?: string;
   createdAt: string; updatedAt: string; authorId?: number;
   category?: { id: number; name: string } | null;
   tags?: { id: number; name: string }[];
@@ -21,29 +21,36 @@ export default function Posts() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [approving, setApproving] = useState<number | null>(null);
   const [error, setError] = useState("");
+  const [tab, setTab] = useState<"all" | "pending">("all");
 
   const load = () => {
     setLoading(true);
     api.get<Post[]>("/posts").then(setPosts).catch(() => setError("Failed to load posts")).finally(() => setLoading(false));
   };
-
   useEffect(() => { load(); }, []);
 
   const deletePost = async (id: number) => {
     if (!confirm("Delete this post? This cannot be undone.")) return;
     setDeleting(id);
-    try {
-      await api.delete(`/posts/${id}`);
-      setPosts(prev => prev.filter(p => p.id !== id));
-    } catch (err: any) {
-      alert(err.message || "Delete failed");
-    } finally {
-      setDeleting(null);
-    }
+    try { await api.delete(`/posts/${id}`); setPosts(prev => prev.filter(p => p.id !== id)); }
+    catch (err: any) { alert(err.message || "Delete failed"); }
+    finally { setDeleting(null); }
   };
 
-  const filtered = posts.filter(p =>
+  const approvePost = async (id: number) => {
+    setApproving(id);
+    try {
+      await api.post(`/posts/${id}/approve`, {});
+      setPosts(prev => prev.map(p => p.id === id ? { ...p, approved: true } : p));
+    } catch (err: any) { alert(err.message || "Failed to approve post"); }
+    finally { setApproving(null); }
+  };
+
+  const pendingPosts = posts.filter(p => !p.approved && p.status === "published");
+
+  const filtered = (tab === "pending" ? pendingPosts : posts).filter(p =>
     p.title.toLowerCase().includes(search.toLowerCase()) ||
     p.author?.username?.toLowerCase().includes(search.toLowerCase())
   );
@@ -53,24 +60,42 @@ export default function Posts() {
   return (
     <AdminLayout>
       <div className="max-w-5xl">
-        {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <div>
             <h1 className="text-2xl font-display font-bold">Posts</h1>
             <p className="text-muted-foreground text-sm">{posts.length} article{posts.length !== 1 ? "s" : ""} total</p>
           </div>
-          <Link href="/admin/posts/new">
-            <button className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors">
-              <Plus className="w-4 h-4" /> New Post
-            </button>
-          </Link>
+          <div className="flex items-center gap-3">
+            {pendingPosts.length > 0 && user?.role === "admin" && (
+              <div className="flex items-center gap-1.5 text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2">
+                <Clock className="w-3.5 h-3.5" /> {pendingPosts.length} awaiting approval
+              </div>
+            )}
+            <Link href="/admin/posts/new">
+              <button className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors">
+                <Plus className="w-4 h-4" /> New Post
+              </button>
+            </Link>
+          </div>
         </div>
+
+        {/* Tabs for admin */}
+        {user?.role === "admin" && (
+          <div className="flex gap-1 mb-4 p-1 bg-muted rounded-lg w-fit">
+            {(["all", "pending"] as const).map(t => (
+              <button key={t} onClick={() => setTab(t)}
+                className={cn("px-4 py-1.5 rounded-md text-sm font-medium transition-colors capitalize",
+                  tab === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                {t === "pending" ? `Needs Approval (${pendingPosts.length})` : "All Posts"}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Search */}
         <div className="relative mb-5">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search posts..."
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search posts..."
             className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
         </div>
 
@@ -84,23 +109,31 @@ export default function Posts() {
           <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
         ) : filtered.length === 0 ? (
           <Card className="p-12 text-center bg-card/40">
-            <p className="text-muted-foreground text-sm">{search ? "No posts match your search." : "No posts yet. Create your first one!"}</p>
-            {!search && <Link href="/admin/posts/new"><button className="mt-4 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors">Create Post</button></Link>}
+            <p className="text-muted-foreground text-sm">{search ? "No posts match your search." : tab === "pending" ? "No posts awaiting approval." : "No posts yet. Create your first one!"}</p>
+            {!search && tab === "all" && <Link href="/admin/posts/new"><button className="mt-4 px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg font-medium hover:bg-primary/90 transition-colors">Create Post</button></Link>}
           </Card>
         ) : (
           <div className="space-y-3">
             {filtered.map(post => (
-              <Card key={post.id} className="p-4 bg-card/60 hover:border-border/80 transition-all">
+              <Card key={post.id} className={cn("p-4 bg-card/60 hover:border-border/80 transition-all", !post.approved && "border-yellow-500/20")}>
                 <div className="flex items-start gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span className={cn(
-                        "text-[11px] px-2 py-0.5 rounded-full font-semibold",
-                        post.status === "published" ? "bg-green-500/10 text-green-400" : "bg-yellow-500/10 text-yellow-400"
-                      )}>
+                      <span className={cn("text-[11px] px-2 py-0.5 rounded-full font-semibold",
+                        post.status === "published" ? "bg-green-500/10 text-green-400" : "bg-yellow-500/10 text-yellow-400")}>
                         {post.status === "published" ? "Published" : "Draft"}
                       </span>
-                      {post.category && <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary">{post.category.name}</span>}
+                      {!post.approved && (
+                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-400 border border-orange-500/20 flex items-center gap-1">
+                          <Clock className="w-2.5 h-2.5" /> Needs Approval
+                        </span>
+                      )}
+                      {post.approved && (
+                        <span className="text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary flex items-center gap-1">
+                          <CheckCircle2 className="w-2.5 h-2.5" /> Approved
+                        </span>
+                      )}
+                      {post.category && <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{post.category.name}</span>}
                     </div>
                     <h3 className="font-semibold text-sm truncate">{post.title}</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
@@ -114,19 +147,28 @@ export default function Posts() {
                       </div>
                     )}
                   </div>
-                  {canEdit(post) && (
-                    <div className="flex items-center gap-1 shrink-0">
-                      <Link href={`/admin/posts/${post.id}/edit`}>
-                        <button className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Edit">
-                          <Pencil className="w-4 h-4" />
-                        </button>
-                      </Link>
-                      <button onClick={() => deletePost(post.id)} disabled={deleting === post.id}
-                        className="p-2 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors" title="Delete">
-                        {deleting === post.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
+                    {user?.role === "admin" && !post.approved && (
+                      <button onClick={() => approvePost(post.id)} disabled={approving === post.id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors">
+                        {approving === post.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                        Approve
                       </button>
-                    </div>
-                  )}
+                    )}
+                    {canEdit(post) && (
+                      <>
+                        <Link href={`/admin/posts/${post.id}/edit`}>
+                          <button className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors" title="Edit">
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                        </Link>
+                        <button onClick={() => deletePost(post.id)} disabled={deleting === post.id}
+                          className="p-2 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors" title="Delete">
+                          {deleting === post.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </Card>
             ))}

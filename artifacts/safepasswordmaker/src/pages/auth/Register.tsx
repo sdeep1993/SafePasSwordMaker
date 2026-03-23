@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import { Shield, Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/Card";
+import PasswordStrength, { isPasswordValid } from "@/components/PasswordStrength";
 
 export default function Register() {
   const { register, user } = useAuth();
@@ -12,17 +13,16 @@ export default function Register() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPw, setShowPw] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   if (user) { navigate("/admin"); return null; }
 
-  const pwStrength = password.length >= 12 && /[A-Z]/.test(password) && /[0-9]/.test(password);
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isPasswordValid(password)) { setError("Please meet all password requirements"); return; }
     if (password !== confirm) { setError("Passwords do not match"); return; }
-    if (password.length < 8) { setError("Password must be at least 8 characters"); return; }
     setError("");
     setLoading(true);
     try {
@@ -75,18 +75,24 @@ export default function Register() {
                   {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              {password && (
-                <div className={`mt-1.5 flex items-center gap-1.5 text-xs ${pwStrength ? "text-green-400" : "text-muted-foreground"}`}>
-                  {pwStrength ? <CheckCircle2 className="w-3 h-3" /> : null}
-                  {pwStrength ? "Strong password" : "Use 12+ chars with uppercase & numbers for a strong password"}
-                </div>
-              )}
+              <PasswordStrength password={password} />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1.5">Confirm Password</label>
-              <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} required
-                placeholder="••••••••"
-                className="w-full px-3 py-2.5 rounded-lg bg-muted border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+              <div className="relative">
+                <input type={showConfirm ? "text" : "password"} value={confirm} onChange={e => setConfirm(e.target.value)} required
+                  placeholder="••••••••"
+                  className="w-full px-3 py-2.5 pr-10 rounded-lg bg-muted border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
+                <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {confirm && (
+                <div className={`flex items-center gap-1.5 text-xs mt-1.5 font-medium ${password === confirm ? "text-green-400" : "text-red-400"}`}>
+                  <CheckCircle2 className="w-3 h-3" />
+                  {password === confirm ? "Passwords match" : "Passwords do not match"}
+                </div>
+              )}
             </div>
             <button type="submit" disabled={loading}
               className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
@@ -95,6 +101,11 @@ export default function Register() {
             </button>
           </form>
         </Card>
+
+        <div className="mt-5 p-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5">
+          <p className="text-xs text-yellow-400 font-medium mb-1">Account Approval Required</p>
+          <p className="text-xs text-muted-foreground">After registration, your account will be reviewed by an admin before you can publish posts. You'll be notified once approved.</p>
+        </div>
 
         <div className="text-center mt-6 text-sm text-muted-foreground space-y-2">
           <p>Already have an account? <Link href="/auth/login" className="text-primary hover:underline">Sign in</Link></p>
