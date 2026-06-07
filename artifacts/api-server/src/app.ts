@@ -29,6 +29,9 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Dev: Vite proxy strips /api-server → request arrives as /api/...
 app.use("/api", router);
+// Production: Replit preserves full path → request arrives as /api-server/api/...
+app.use("/api-server/api", router);
 
 export default app;
