@@ -1,0 +1,14 @@
+langcode: en
+status: true
+dependencies: {  }
+id: contributor
+label: Contributor
+weight: 3
+is_admin: false
+permissions:
+  - 'access content'
+  - 'create article content'
+  - 'delete own article content'
+  - 'edit own article content'
+  - 'view own unpublished content'
+  - 'use text format full_html'

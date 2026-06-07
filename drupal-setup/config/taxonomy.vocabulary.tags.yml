@@ -1,0 +1,8 @@
+langcode: en
+status: true
+dependencies: {  }
+name: Tags
+vid: tags
+description: 'Blog post tags'
+hierarchy: 0
+weight: 0

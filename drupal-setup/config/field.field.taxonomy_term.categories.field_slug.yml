@@ -1,0 +1,17 @@
+langcode: en
+status: true
+dependencies:
+  config:
+    - field.storage.taxonomy_term.field_slug
+    - taxonomy.vocabulary.categories
+id: taxonomy_term.categories.field_slug
+field_name: field_slug
+entity_type: taxonomy_term
+bundle: categories
+label: Slug
+required: false
+translatable: false
+default_value: {  }
+settings:
+  max_length: 255
+field_type: string

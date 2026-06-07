@@ -1,0 +1,17 @@
+langcode: en
+status: true
+dependencies:
+  config:
+    - field.storage.node.field_approved
+    - node.type.article
+id: node.article.field_approved
+field_name: field_approved
+entity_type: node
+bundle: article
+label: 'Admin Approved'
+description: 'Only approved articles appear on the public frontend'
+required: false
+translatable: false
+default_value:
+  - value: 0
+field_type: boolean
