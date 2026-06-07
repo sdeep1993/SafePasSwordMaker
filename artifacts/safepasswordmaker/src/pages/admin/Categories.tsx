@@ -2,24 +2,28 @@ import React, { useEffect, useState } from "react";
 import { FolderOpen, Plus, Pencil, Trash2, Loader2, Check, X, AlertCircle, ShieldAlert } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { Card } from "@/components/ui/Card";
-import { api } from "@/lib/api";
+import { getCategories, createTerm, updateTerm, deleteTerm, isDrupalConfigured, DrupalTaxonomyTerm } from "@/lib/drupal";
 import { useAuth } from "@/contexts/AuthContext";
-
-interface Category { id: number; name: string; slug: string; createdAt: string }
+import { DrupalNotConfigured } from "@/components/DrupalNotConfigured";
 
 export default function Categories() {
   const { user } = useAuth();
-  const [cats, setCats] = useState<Category[]>([]);
+  const [cats, setCats] = useState<DrupalTaxonomyTerm[]>([]);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
   const [adding, setAdding] = useState(false);
-  const [editId, setEditId] = useState<number | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const load = () => api.get<Category[]>("/categories").then(setCats).finally(() => setLoading(false));
-  useEffect(() => { load(); }, []);
+  const load = () => {
+    setLoading(true);
+    getCategories().then(setCats).catch(() => setError("Failed to load categories")).finally(() => setLoading(false));
+  };
+  useEffect(() => { if (isDrupalConfigured()) load(); else setLoading(false); }, []);
+
+  if (!isDrupalConfigured()) return <AdminLayout><DrupalNotConfigured /></AdminLayout>;
 
   if (user?.role !== "admin") {
     return (
@@ -37,28 +41,28 @@ export default function Categories() {
     if (!newName.trim()) return;
     setAdding(true); setError("");
     try {
-      const cat = await api.post<Category>("/categories", { name: newName.trim() });
+      const cat = await createTerm("categories", newName.trim());
       setCats(prev => [...prev, cat].sort((a, b) => a.name.localeCompare(b.name)));
       setNewName("");
     } catch (err: any) { setError(err.message || "Failed to add category"); }
     finally { setAdding(false); }
   };
 
-  const saveEdit = async (id: number) => {
+  const saveEdit = async (id: string) => {
     if (!editName.trim()) return;
     setSaving(true); setError("");
     try {
-      const cat = await api.put<Category>(`/categories/${id}`, { name: editName.trim() });
+      const cat = await updateTerm("categories", id, editName.trim());
       setCats(prev => prev.map(c => c.id === id ? cat : c));
       setEditId(null);
     } catch (err: any) { setError(err.message || "Failed to update category"); }
     finally { setSaving(false); }
   };
 
-  const deleteCat = async (id: number) => {
+  const deleteCat = async (id: string) => {
     if (!confirm("Delete this category?")) return;
-    await api.delete(`/categories/${id}`);
-    setCats(prev => prev.filter(c => c.id !== id));
+    try { await deleteTerm("categories", id); setCats(prev => prev.filter(c => c.id !== id)); }
+    catch (err: any) { alert(err.message || "Failed to delete category"); }
   };
 
   return (

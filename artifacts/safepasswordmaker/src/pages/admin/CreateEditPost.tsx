@@ -3,11 +3,12 @@ import { useLocation, useParams } from "wouter";
 import { ArrowLeft, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { Card } from "@/components/ui/Card";
-import { api } from "@/lib/api";
+import {
+  getTags, getCategories, getPostBySlug, getAllPostsAdmin,
+  createPost, updatePost, isDrupalConfigured, DrupalTaxonomyTerm,
+} from "@/lib/drupal";
+import { DrupalNotConfigured } from "@/components/DrupalNotConfigured";
 import { cn } from "@/lib/utils";
-
-interface Tag { id: number; name: string }
-interface Category { id: number; name: string }
 
 export default function CreateEditPost() {
   const params = useParams<{ id?: string }>();
@@ -17,36 +18,47 @@ export default function CreateEditPost() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [excerpt, setExcerpt] = useState("");
-  const [image, setImage] = useState("");
-  const [status, setStatus] = useState<"draft" | "published">("draft");
-  const [categoryId, setCategoryId] = useState<number | "">("");
-  const [selectedTags, setSelectedTags] = useState<number[]>([]);
+  const [imageUrl, setImageUrl] = useState("");
+  const [status, setStatus] = useState<"published" | "draft">("draft");
+  const [categoryId, setCategoryId] = useState<string>("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
-  const [allTags, setAllTags] = useState<Tag[]>([]);
-  const [allCats, setAllCats] = useState<Category[]>([]);
+  const [allTags, setAllTags] = useState<DrupalTaxonomyTerm[]>([]);
+  const [allCats, setAllCats] = useState<DrupalTaxonomyTerm[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      api.get<Tag[]>("/tags"),
-      api.get<Category[]>("/categories"),
-    ]).then(([tags, cats]) => { setAllTags(tags); setAllCats(cats); });
+    if (!isDrupalConfigured()) return;
+    Promise.all([getTags(), getCategories()]).then(([tags, cats]) => {
+      setAllTags(tags);
+      setAllCats(cats);
+    });
 
-    if (isEdit) {
+    if (isEdit && params.id) {
       setLoading(true);
-      api.get<any>(`/posts/${params.id}`).then(p => {
-        setTitle(p.title); setContent(p.content); setExcerpt(p.excerpt || "");
-        setImage(p.image || ""); setStatus(p.status);
-        if (p.categoryId) setCategoryId(p.categoryId);
-        if (p.tags) setSelectedTags(p.tags.map((t: Tag) => t.id));
+      getAllPostsAdmin().then(posts => {
+        const p = posts.find(x => x.id === params.id);
+        if (p) {
+          setTitle(p.title);
+          setContent(p.content);
+          setExcerpt(p.excerpt || "");
+          setImageUrl(p.image || "");
+          setStatus(p.status);
+          if (p.category) setCategoryId(p.category.id);
+          setSelectedTags(p.tags.map(t => t.id));
+        } else {
+          setError("Post not found");
+        }
       }).catch(() => setError("Failed to load post")).finally(() => setLoading(false));
     }
   }, [params.id, isEdit]);
 
-  const toggleTag = (id: number) => {
+  if (!isDrupalConfigured()) return <AdminLayout><DrupalNotConfigured /></AdminLayout>;
+
+  const toggleTag = (id: string) => {
     setSelectedTags(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]);
   };
 
@@ -55,11 +67,19 @@ export default function CreateEditPost() {
     if (!title.trim() || !content.trim()) { setError("Title and content are required"); return; }
     setSaving(true); setError(""); setSuccess(false);
     try {
-      const body = { title, content, excerpt, image, status, categoryId: categoryId || null, tagIds: selectedTags };
-      if (isEdit) {
-        await api.put(`/posts/${params.id}`, body);
+      const payload = {
+        title,
+        content,
+        excerpt,
+        imageUrl,
+        status: status === "published",
+        categoryId: categoryId || undefined,
+        tagIds: selectedTags,
+      };
+      if (isEdit && params.id) {
+        await updatePost(params.id, payload);
       } else {
-        await api.post("/posts", body);
+        await createPost(payload);
       }
       setSuccess(true);
       setTimeout(() => navigate("/admin/posts"), 1000);
@@ -108,14 +128,16 @@ export default function CreateEditPost() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1.5">Hero Image URL</label>
-                <input value={image} onChange={e => setImage(e.target.value)}
+                <input value={imageUrl} onChange={e => setImageUrl(e.target.value)}
                   placeholder="https://images.unsplash.com/..."
                   className="w-full px-3 py-2.5 rounded-lg bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50" />
               </div>
             </Card>
 
             <Card className="p-5 bg-card/60 border-border">
-              <label className="block text-sm font-medium mb-1.5">Content * <span className="text-muted-foreground font-normal">(Markdown supported: ## Heading, **bold**, `code`, - list)</span></label>
+              <label className="block text-sm font-medium mb-1.5">
+                Content * <span className="text-muted-foreground font-normal">(Markdown: ## Heading, **bold**, `code`, - list)</span>
+              </label>
               <textarea value={content} onChange={e => setContent(e.target.value)} required rows={16}
                 placeholder="Write your article here using Markdown..."
                 className="w-full px-3 py-2.5 rounded-lg bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 font-mono resize-y" />
@@ -124,7 +146,7 @@ export default function CreateEditPost() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Card className="p-5 bg-card/60 border-border">
                 <label className="block text-sm font-medium mb-2">Category</label>
-                <select value={categoryId} onChange={e => setCategoryId(e.target.value ? Number(e.target.value) : "")}
+                <select value={categoryId} onChange={e => setCategoryId(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-lg bg-muted border border-border text-sm focus:outline-none focus:ring-2 focus:ring-primary/50">
                   <option value="">No category</option>
                   {allCats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}

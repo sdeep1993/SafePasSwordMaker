@@ -3,59 +3,55 @@ import { Link } from "wouter";
 import { Plus, Pencil, Trash2, Search, Loader2, AlertCircle, CheckCircle2, Clock } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { Card } from "@/components/ui/Card";
-import { api } from "@/lib/api";
+import { getAllPostsAdmin, deletePost, approvePost, DrupalPost, isDrupalConfigured } from "@/lib/drupal";
 import { useAuth } from "@/contexts/AuthContext";
+import { DrupalNotConfigured } from "@/components/DrupalNotConfigured";
 import { cn } from "@/lib/utils";
-
-interface Post {
-  id: number; title: string; slug: string; status: string; approved: boolean; excerpt?: string;
-  createdAt: string; updatedAt: string; authorId?: number;
-  category?: { id: number; name: string } | null;
-  tags?: { id: number; name: string }[];
-  author?: { id: number; username: string } | null;
-}
 
 export default function Posts() {
   const { user } = useAuth();
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [posts, setPosts] = useState<DrupalPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [deleting, setDeleting] = useState<number | null>(null);
-  const [approving, setApproving] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [approving, setApproving] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<"all" | "pending">("all");
 
   const load = () => {
     setLoading(true);
-    api.get<Post[]>("/posts").then(setPosts).catch(() => setError("Failed to load posts")).finally(() => setLoading(false));
+    getAllPostsAdmin().then(setPosts).catch(() => setError("Failed to load posts")).finally(() => setLoading(false));
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { if (isDrupalConfigured()) load(); else setLoading(false); }, []);
 
-  const deletePost = async (id: number) => {
+  if (!isDrupalConfigured()) return <AdminLayout><DrupalNotConfigured /></AdminLayout>;
+
+  const handleDelete = async (id: string) => {
     if (!confirm("Delete this post? This cannot be undone.")) return;
     setDeleting(id);
-    try { await api.delete(`/posts/${id}`); setPosts(prev => prev.filter(p => p.id !== id)); }
+    try { await deletePost(id); setPosts(prev => prev.filter(p => p.id !== id)); }
     catch (err: any) { alert(err.message || "Delete failed"); }
     finally { setDeleting(null); }
   };
 
-  const approvePost = async (id: number) => {
+  const handleApprove = async (id: string) => {
     setApproving(id);
     try {
-      await api.post(`/posts/${id}/approve`, {});
+      const updated = await approvePost(id);
       setPosts(prev => prev.map(p => p.id === id ? { ...p, approved: true } : p));
     } catch (err: any) { alert(err.message || "Failed to approve post"); }
     finally { setApproving(null); }
   };
 
   const pendingPosts = posts.filter(p => !p.approved && p.status === "published");
+  const myId = user?.id;
 
   const filtered = (tab === "pending" ? pendingPosts : posts).filter(p =>
     p.title.toLowerCase().includes(search.toLowerCase()) ||
-    p.author?.username?.toLowerCase().includes(search.toLowerCase())
+    p.author?.name?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const canEdit = (p: Post) => user?.role === "admin" || p.authorId === user?.id;
+  const canEdit = (p: DrupalPost) => user?.role === "admin" || p.author?.id === myId;
 
   return (
     <AdminLayout>
@@ -79,7 +75,6 @@ export default function Posts() {
           </div>
         </div>
 
-        {/* Tabs for admin */}
         {user?.role === "admin" && (
           <div className="flex gap-1 mb-4 p-1 bg-muted rounded-lg w-fit">
             {(["all", "pending"] as const).map(t => (
@@ -92,7 +87,6 @@ export default function Posts() {
           </div>
         )}
 
-        {/* Search */}
         <div className="relative mb-5">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search posts..."
@@ -137,9 +131,9 @@ export default function Posts() {
                     </div>
                     <h3 className="font-semibold text-sm truncate">{post.title}</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      by {post.author?.username || "Unknown"} · {new Date(post.createdAt).toLocaleDateString()}
+                      by {post.author?.name || "Unknown"} · {new Date(post.createdAt).toLocaleDateString()}
                     </p>
-                    {post.tags && post.tags.length > 0 && (
+                    {post.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1.5">
                         {post.tags.map(t => (
                           <span key={t.id} className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{t.name}</span>
@@ -149,7 +143,7 @@ export default function Posts() {
                   </div>
                   <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
                     {user?.role === "admin" && !post.approved && (
-                      <button onClick={() => approvePost(post.id)} disabled={approving === post.id}
+                      <button onClick={() => handleApprove(post.id)} disabled={approving === post.id}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 transition-colors">
                         {approving === post.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
                         Approve
@@ -162,7 +156,7 @@ export default function Posts() {
                             <Pencil className="w-4 h-4" />
                           </button>
                         </Link>
-                        <button onClick={() => deletePost(post.id)} disabled={deleting === post.id}
+                        <button onClick={() => handleDelete(post.id)} disabled={deleting === post.id}
                           className="p-2 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors" title="Delete">
                           {deleting === post.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                         </button>

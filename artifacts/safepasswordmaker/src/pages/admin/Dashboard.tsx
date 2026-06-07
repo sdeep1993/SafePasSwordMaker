@@ -3,8 +3,9 @@ import { Link } from "wouter";
 import { FileText, Tag, FolderOpen, Users, PenSquare, ArrowRight } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { Card } from "@/components/ui/Card";
-import { api } from "@/lib/api";
+import { getDrupalStats, isDrupalConfigured } from "@/lib/drupal";
 import { useAuth } from "@/contexts/AuthContext";
+import { DrupalNotConfigured } from "@/components/DrupalNotConfigured";
 
 interface Stats { posts: number; tags: number; categories: number; users: number }
 
@@ -13,15 +14,15 @@ export default function Dashboard() {
   const [stats, setStats] = useState<Stats>({ posts: 0, tags: 0, categories: 0, users: 0 });
 
   useEffect(() => {
-    Promise.all([
-      api.get<any[]>("/posts").catch(() => []),
-      api.get<any[]>("/tags").catch(() => []),
-      api.get<any[]>("/categories").catch(() => []),
-      user?.role === "admin" ? api.get<any[]>("/users").catch(() => []) : Promise.resolve([]),
-    ]).then(([posts, tags, categories, users]) => {
-      setStats({ posts: posts.length, tags: tags.length, categories: categories.length, users: users.length });
-    });
-  }, [user]);
+    if (!isDrupalConfigured()) return;
+    getDrupalStats()
+      .then(s => setStats(s))
+      .catch(() => {});
+  }, []);
+
+  if (!isDrupalConfigured()) {
+    return <AdminLayout><DrupalNotConfigured /></AdminLayout>;
+  }
 
   const cards = [
     { label: "Total Posts", value: stats.posts, icon: FileText, href: "/admin/posts", color: "text-blue-400" },
@@ -38,7 +39,6 @@ export default function Dashboard() {
           <p className="text-muted-foreground text-sm mt-1">Here's what's happening with your content.</p>
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {cards.map(c => (
             <Link key={c.href} href={c.href}>
@@ -51,7 +51,6 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* Quick actions */}
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Quick Actions</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Link href="/admin/posts/new">

@@ -2,49 +2,53 @@ import React, { useEffect, useState } from "react";
 import { Tag as TagIcon, Plus, Pencil, Trash2, Loader2, Check, X, AlertCircle } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { Card } from "@/components/ui/Card";
-import { api } from "@/lib/api";
-
-interface Tag { id: number; name: string; slug: string }
+import { getTags, createTerm, updateTerm, deleteTerm, isDrupalConfigured, DrupalTaxonomyTerm } from "@/lib/drupal";
+import { DrupalNotConfigured } from "@/components/DrupalNotConfigured";
 
 export default function Tags() {
-  const [tags, setTags] = useState<Tag[]>([]);
+  const [tags, setTags] = useState<DrupalTaxonomyTerm[]>([]);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
   const [adding, setAdding] = useState(false);
-  const [editId, setEditId] = useState<number | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const load = () => api.get<Tag[]>("/tags").then(setTags).finally(() => setLoading(false));
-  useEffect(() => { load(); }, []);
+  const load = () => {
+    setLoading(true);
+    getTags().then(setTags).catch(() => setError("Failed to load tags")).finally(() => setLoading(false));
+  };
+  useEffect(() => { if (isDrupalConfigured()) load(); else setLoading(false); }, []);
+
+  if (!isDrupalConfigured()) return <AdminLayout><DrupalNotConfigured /></AdminLayout>;
 
   const addTag = async () => {
     if (!newName.trim()) return;
     setAdding(true); setError("");
     try {
-      const tag = await api.post<Tag>("/tags", { name: newName.trim() });
+      const tag = await createTerm("tags", newName.trim());
       setTags(prev => [...prev, tag].sort((a, b) => a.name.localeCompare(b.name)));
       setNewName("");
     } catch (err: any) { setError(err.message || "Failed to add tag"); }
     finally { setAdding(false); }
   };
 
-  const saveEdit = async (id: number) => {
+  const saveEdit = async (id: string) => {
     if (!editName.trim()) return;
     setSaving(true); setError("");
     try {
-      const tag = await api.put<Tag>(`/tags/${id}`, { name: editName.trim() });
+      const tag = await updateTerm("tags", id, editName.trim());
       setTags(prev => prev.map(t => t.id === id ? tag : t));
       setEditId(null);
     } catch (err: any) { setError(err.message || "Failed to update tag"); }
     finally { setSaving(false); }
   };
 
-  const deleteTag = async (id: number) => {
+  const deleteTag = async (id: string) => {
     if (!confirm("Delete this tag?")) return;
-    await api.delete(`/tags/${id}`);
-    setTags(prev => prev.filter(t => t.id !== id));
+    try { await deleteTerm("tags", id); setTags(prev => prev.filter(t => t.id !== id)); }
+    catch (err: any) { alert(err.message || "Failed to delete tag"); }
   };
 
   return (
@@ -61,7 +65,6 @@ export default function Tags() {
           </div>
         )}
 
-        {/* Add tag */}
         <Card className="p-4 bg-card/60 border-border mb-5">
           <label className="block text-sm font-medium mb-2">Add New Tag</label>
           <div className="flex gap-2">

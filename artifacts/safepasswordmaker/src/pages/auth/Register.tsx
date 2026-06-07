@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { Shield, Eye, EyeOff, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card } from "@/components/ui/Card";
@@ -7,7 +7,6 @@ import PasswordStrength, { isPasswordValid } from "@/components/PasswordStrength
 
 export default function Register() {
   const { register, user } = useAuth();
-  const [, navigate] = useLocation();
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,8 +15,12 @@ export default function Register() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
 
-  if (user) { navigate("/admin"); return null; }
+  if (user && !pending) {
+    window.location.href = "/admin";
+    return null;
+  }
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,13 +30,45 @@ export default function Register() {
     setLoading(true);
     try {
       await register(username, email, password);
-      navigate("/admin");
     } catch (err: any) {
-      setError(err.message || "Registration failed");
+      if (err.message === "__PENDING__") {
+        setPending(true);
+      } else {
+        setError(err.message || "Registration failed");
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  if (pending) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="w-full max-w-md text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-green-500/10 border border-green-500/20 mb-6">
+            <CheckCircle2 className="w-8 h-8 text-green-400" />
+          </div>
+          <h1 className="text-2xl font-display font-bold mb-2">Account Created!</h1>
+          <p className="text-muted-foreground text-sm mb-6">
+            Your contributor account is pending admin approval. You'll be able to log in once an administrator reviews and activates your account.
+          </p>
+          <div className="p-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5 text-left mb-6">
+            <p className="text-xs text-yellow-400 font-medium mb-1">What happens next?</p>
+            <ul className="text-xs text-muted-foreground space-y-1">
+              <li>• An admin will review your registration</li>
+              <li>• Your account will be activated in Drupal</li>
+              <li>• You can then log in and start writing posts</li>
+            </ul>
+          </div>
+          <Link href="/">
+            <button className="px-6 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors">
+              Back to Site
+            </button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -104,7 +139,7 @@ export default function Register() {
 
         <div className="mt-5 p-4 rounded-xl border border-yellow-500/20 bg-yellow-500/5">
           <p className="text-xs text-yellow-400 font-medium mb-1">Account Approval Required</p>
-          <p className="text-xs text-muted-foreground">After registration, your account will be reviewed by an admin before you can publish posts. You'll be notified once approved.</p>
+          <p className="text-xs text-muted-foreground">After registration, your account will be reviewed by an admin before you can log in and publish posts.</p>
         </div>
 
         <div className="text-center mt-6 text-sm text-muted-foreground space-y-2">

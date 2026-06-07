@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Link, useParams } from 'wouter';
-import { ArrowLeft, Calendar, Clock, Tag, ArrowRight, Twitter, Linkedin, Github, List, Share2, Link2 } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, Tag, ArrowRight, Twitter, Linkedin, Github, List, Share2, Link2, Loader2 } from 'lucide-react';
 import { POSTS } from './Blog';
 import { Card } from '@/components/ui/Card';
 import { cn } from '@/lib/utils';
+import { getPostBySlug, isDrupalConfigured } from '@/lib/drupal';
 
 /* ---------- helpers ---------- */
 
@@ -244,38 +245,96 @@ function ShareCard({ title, slug }: { title: string; slug: string }) {
   );
 }
 
+/* ---------- Normalized post type ---------- */
+
+interface NormalizedPost {
+  slug: string; title: string; content: string;
+  category: string; date: string; readTime: string; image: string;
+  author: { name: string; bio?: string; avatar?: string; role?: string;
+    twitter?: string; linkedin?: string; github?: string } | null;
+  prevPost?: { slug: string; title: string } | null;
+  nextPost?: { slug: string; title: string } | null;
+}
+
+function normalizeStatic(p: typeof POSTS[0], all: typeof POSTS): NormalizedPost {
+  const idx = all.indexOf(p);
+  return {
+    slug: p.slug, title: p.title, content: p.content, category: p.category,
+    date: p.date, readTime: p.readTime,
+    image: `https://images.unsplash.com/photo-${p.image}?w=1400&h=600&fit=crop&q=80`,
+    author: p.author || null,
+    prevPost: all[(idx - 1 + all.length) % all.length],
+    nextPost: all[(idx + 1) % all.length],
+  };
+}
+
 /* ---------- Main component ---------- */
 
 export default function BlogPost() {
   const params = useParams<{ slug: string }>();
-  const post = POSTS.find(p => p.slug === params.slug);
+  const [post, setPost] = useState<NormalizedPost | null>(null);
+  const [loading, setLoading] = useState(true);
   const [activeId, setActiveId] = useState('');
   const contentRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const slug = params.slug;
+    setLoading(true);
+    setPost(null);
+
+    const loadStatic = () => {
+      const s = POSTS.find(p => p.slug === slug);
+      setPost(s ? normalizeStatic(s, POSTS) : null);
+      setLoading(false);
+    };
+
+    if (isDrupalConfigured()) {
+      getPostBySlug(slug)
+        .then(dp => {
+          if (dp) {
+            setPost({
+              slug: dp.slug, title: dp.title, content: dp.content,
+              category: dp.category?.name || "General",
+              date: new Date(dp.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+              readTime: dp.readTime || "5 min read",
+              image: dp.image || "",
+              author: dp.author ? {
+                name: dp.author.name, bio: dp.author.bio, avatar: dp.author.avatar,
+                role: dp.author.role, twitter: dp.author.twitter,
+                linkedin: dp.author.linkedin, github: dp.author.github,
+              } : null,
+              prevPost: null, nextPost: null,
+            });
+            setLoading(false);
+          } else {
+            loadStatic();
+          }
+        })
+        .catch(() => loadStatic());
+    } else {
+      loadStatic();
+    }
+  }, [params.slug]);
+
   const headings = useMemo(() => post ? extractHeadings(post.content) : [], [post]);
 
-  // Scroll-spy: track which heading is in view
   useEffect(() => {
     if (headings.length === 0) return;
-
     const observer = new IntersectionObserver(
-      entries => {
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
-            setActiveId(entry.target.id);
-          }
-        });
-      },
+      entries => { entries.forEach(e => { if (e.isIntersecting) setActiveId(e.target.id); }); },
       { rootMargin: '-20% 0% -70% 0%', threshold: 0 }
     );
-
-    headings.forEach(h => {
-      const el = document.getElementById(h.id);
-      if (el) observer.observe(el);
-    });
-
+    headings.forEach(h => { const el = document.getElementById(h.id); if (el) observer.observe(el); });
     return () => observer.disconnect();
   }, [headings]);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-[50vh]">
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (!post) {
     return (
@@ -289,9 +348,8 @@ export default function BlogPost() {
     );
   }
 
-  const postIndex = POSTS.indexOf(post);
-  const nextPost = POSTS[(postIndex + 1) % POSTS.length];
-  const prevPost = POSTS[(postIndex - 1 + POSTS.length) % POSTS.length];
+  const prevPost = post.prevPost;
+  const nextPost = post.nextPost;
 
   return (
     <div className="w-full">
@@ -378,29 +436,35 @@ export default function BlogPost() {
             <div className="h-px bg-border mt-14 mb-10" />
 
             {/* Prev / Next */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <Link href={`/blog/${prevPost.slug}`}>
-                <Card className="p-5 hover:border-primary/50 transition-all group cursor-pointer h-full">
-                  <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1.5">
-                    <ArrowLeft className="w-3 h-3" /> Previous Article
-                  </p>
-                  <h4 className="font-semibold group-hover:text-primary transition-colors text-sm leading-snug">{prevPost.title}</h4>
-                </Card>
-              </Link>
-              <Link href={`/blog/${nextPost.slug}`}>
-                <Card className="p-5 hover:border-primary/50 transition-all group cursor-pointer text-right h-full">
-                  <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1.5 justify-end">
-                    Next Article <ArrowRight className="w-3 h-3" />
-                  </p>
-                  <h4 className="font-semibold group-hover:text-primary transition-colors text-sm leading-snug">{nextPost.title}</h4>
-                </Card>
-              </Link>
-            </div>
+            {(prevPost || nextPost) && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                {prevPost ? (
+                  <Link href={`/blog/${prevPost.slug}`}>
+                    <Card className="p-5 hover:border-primary/50 transition-all group cursor-pointer h-full">
+                      <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1.5">
+                        <ArrowLeft className="w-3 h-3" /> Previous Article
+                      </p>
+                      <h4 className="font-semibold group-hover:text-primary transition-colors text-sm leading-snug">{prevPost.title}</h4>
+                    </Card>
+                  </Link>
+                ) : <div />}
+                {nextPost ? (
+                  <Link href={`/blog/${nextPost.slug}`}>
+                    <Card className="p-5 hover:border-primary/50 transition-all group cursor-pointer text-right h-full">
+                      <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1.5 justify-end">
+                        Next Article <ArrowRight className="w-3 h-3" />
+                      </p>
+                      <h4 className="font-semibold group-hover:text-primary transition-colors text-sm leading-snug">{nextPost.title}</h4>
+                    </Card>
+                  </Link>
+                ) : <div />}
+              </div>
+            )}
           </article>
 
           {/* RIGHT: Author + Share */}
           <aside className="hidden lg:block w-56 shrink-0 sticky top-24 self-start space-y-4">
-            {post.author && <AuthorCard author={post.author} />}
+            {post.author && <AuthorCard author={{ name: post.author.name, role: post.author.role || "", bio: post.author.bio || "", avatar: post.author.avatar || "", twitter: post.author.twitter || "", linkedin: post.author.linkedin || "", github: post.author.github || "" }} />}
             <ShareCard title={post.title} slug={post.slug} />
           </aside>
 
@@ -408,7 +472,7 @@ export default function BlogPost() {
 
         {/* Mobile author + share (below content) */}
         <div className="lg:hidden mt-10 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {post.author && <AuthorCard author={post.author} />}
+          {post.author && <AuthorCard author={{ name: post.author.name, role: post.author.role || "", bio: post.author.bio || "", avatar: post.author.avatar || "", twitter: post.author.twitter || "", linkedin: post.author.linkedin || "", github: post.author.github || "" }} />}
           <ShareCard title={post.title} slug={post.slug} />
         </div>
 

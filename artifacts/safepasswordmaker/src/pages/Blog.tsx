@@ -3,9 +3,9 @@ import { Link } from 'wouter';
 import { Card } from '@/components/ui/Card';
 import { ArrowRight, Calendar, Tag, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { api } from '@/lib/api';
+import { getPosts, isDrupalConfigured, DrupalPost } from '@/lib/drupal';
 
-// ─── Static AUTHORS (for static posts) ──────────────────────────────────────
+// ─── Static AUTHORS (kept as fallback data) ──────────────────────────────────
 export const AUTHORS = {
   alex: {
     name: "Alex Mercer", role: "Security Researcher",
@@ -27,7 +27,7 @@ export const AUTHORS = {
   },
 };
 
-// ─── Static posts (kept for BlogPost routing backward compat) ──────────────
+// ─── Static posts (fallback when Drupal not connected) ──────────────────────
 export const POSTS = [
   {
     slug: 'what-makes-a-strong-password', title: "What Makes a Strong Password in 2024?",
@@ -216,62 +216,55 @@ Use our Hash Generator to compute any of these algorithms instantly in your brow
   }
 ];
 
-// ─── DB Post type ────────────────────────────────────────────────────────────
-interface DBPost {
-  id: number; title: string; slug: string; excerpt?: string; image?: string;
-  status: string; approved: boolean; createdAt: string;
-  category?: { id: number; name: string } | null;
-  author?: { id: number; username: string; firstName?: string; lastName?: string; profilePicture?: string } | null;
-}
-
-// ─── Unified display type ────────────────────────────────────────────────────
+// ─── Display post type ────────────────────────────────────────────────────────
 interface DisplayPost {
   slug: string; title: string; category: string; excerpt: string;
-  date: string; readTime: string; image: string; isDb: boolean;
-  authorName: string;
+  date: string; readTime: string; image: string; authorName: string;
 }
 
-function makeDisplay(p: DBPost): DisplayPost {
-  const authorName = p.author?.firstName && p.author?.lastName
-    ? `${p.author.firstName} ${p.author.lastName}`
-    : p.author?.username || "Anonymous";
+function fromDrupal(p: DrupalPost): DisplayPost {
+  const authorName = p.author?.name || "Anonymous";
   return {
-    slug: p.slug, title: p.title, category: p.category?.name || "General",
-    excerpt: p.excerpt || "", date: new Date(p.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-    readTime: "5 min read", image: p.image || "", isDb: true, authorName,
+    slug: p.slug, title: p.title,
+    category: p.category?.name || "General",
+    excerpt: p.excerpt,
+    date: new Date(p.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    readTime: p.readTime || "5 min read",
+    image: p.image || "",
+    authorName,
   };
 }
 
-function makeStaticDisplay(p: typeof POSTS[0]): DisplayPost {
+function fromStatic(p: typeof POSTS[0]): DisplayPost {
   return {
     slug: p.slug, title: p.title, category: p.category, excerpt: p.excerpt,
     date: p.date, readTime: p.readTime,
     image: `https://images.unsplash.com/photo-${p.image}?w=600&h=400&fit=crop&q=80`,
-    isDb: false, authorName: p.author.name,
+    authorName: p.author.name,
   };
 }
-
-const STATIC_SLUGS = new Set(POSTS.map(p => p.slug));
 
 export default function Blog() {
   const [activeCategory, setActiveCategory] = useState('All');
   const [search, setSearch] = useState('');
-  const [dbPosts, setDbPosts] = useState<DBPost[]>([]);
-  const [loadingDb, setLoadingDb] = useState(true);
+  const [drupalPosts, setDrupalPosts] = useState<DrupalPost[]>([]);
+  const [loading, setLoading] = useState(isDrupalConfigured());
 
   useEffect(() => {
-    api.get<DBPost[]>("/posts")
-      .then(posts => setDbPosts(posts.filter(p => p.status === "published" && p.approved)))
+    if (!isDrupalConfigured()) return;
+    getPosts()
+      .then(posts => setDrupalPosts(posts))
       .catch(() => {})
-      .finally(() => setLoadingDb(false));
+      .finally(() => setLoading(false));
   }, []);
 
-  // Combine: DB posts first, then static posts not already in DB by slug
-  const dbSlugs = new Set(dbPosts.map(p => p.slug));
-  const allPosts: DisplayPost[] = [
-    ...dbPosts.map(makeDisplay),
-    ...POSTS.filter(p => !dbSlugs.has(p.slug)).map(makeStaticDisplay),
-  ];
+  // Drupal posts take priority; static posts fill in as fallback
+  const drupalSlugs = new Set(drupalPosts.map(p => p.slug));
+  const allPosts: DisplayPost[] = isDrupalConfigured()
+    ? drupalPosts.map(fromDrupal)
+    : [
+        ...POSTS.filter(p => !drupalSlugs.has(p.slug)).map(fromStatic),
+      ];
 
   const categories = ['All', ...Array.from(new Set(allPosts.map(p => p.category))).sort()];
 
@@ -287,16 +280,16 @@ export default function Blog() {
     <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
       <div className="text-center mb-12">
         <h1 className="text-4xl md:text-5xl font-display font-bold mb-4">Security Blog</h1>
-        <p className="text-xl text-muted-foreground max-w-2xl mx-auto">Latest guides, research, and insights to keep you secure online.</p>
+        <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+          Latest guides, research, and insights to keep you secure online.
+        </p>
       </div>
 
-      {/* Search */}
       <div className="max-w-xl mx-auto mb-8">
         <input type="search" placeholder="Search articles..." value={search} onChange={e => setSearch(e.target.value)}
           className="w-full px-5 py-3 rounded-full border border-border bg-card/60 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition" />
       </div>
 
-      {/* Category tabs */}
       <div className="flex gap-2 justify-center mb-12 flex-wrap">
         {categories.map(cat => (
           <button key={cat} onClick={() => setActiveCategory(cat)}
@@ -309,13 +302,13 @@ export default function Blog() {
         ))}
       </div>
 
-      {loadingDb && (
+      {loading && (
         <div className="flex justify-center py-4 mb-6">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
         </div>
       )}
 
-      {filtered.length === 0 && !loadingDb ? (
+      {filtered.length === 0 && !loading ? (
         <div className="text-center py-24 text-muted-foreground">
           <p className="text-xl mb-2">No articles found.</p>
           <button onClick={() => { setActiveCategory('All'); setSearch(''); }} className="text-primary hover:underline text-sm">Clear filters</button>

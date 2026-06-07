@@ -2,26 +2,29 @@ import React, { useEffect, useState } from "react";
 import { Users as UsersIcon, Trash2, Loader2, ShieldAlert, Shield, User, CheckCircle2, Clock } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 import { Card } from "@/components/ui/Card";
-import { api } from "@/lib/api";
+import {
+  getDrupalUsers, setDrupalUserRole, approveDrupalUser, deleteDrupalUser,
+  DrupalUser, isDrupalConfigured,
+} from "@/lib/drupal";
 import { useAuth } from "@/contexts/AuthContext";
+import { DrupalNotConfigured } from "@/components/DrupalNotConfigured";
 import { cn } from "@/lib/utils";
-
-interface UserRow {
-  id: number; username: string; email: string; role: string; status: string;
-  firstName?: string; lastName?: string; designation?: string; profilePicture?: string; createdAt: string;
-}
 
 export default function Users() {
   const { user: me } = useAuth();
-  const [users, setUsers] = useState<UserRow[]>([]);
+  const [users, setUsers] = useState<DrupalUser[]>([]);
   const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState<number | null>(null);
-  const [updatingRole, setUpdatingRole] = useState<number | null>(null);
-  const [approving, setApproving] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [updatingRole, setUpdatingRole] = useState<string | null>(null);
+  const [approving, setApproving] = useState<string | null>(null);
   const [tab, setTab] = useState<"all" | "pending">("all");
 
-  const load = () => api.get<UserRow[]>("/users").then(setUsers).finally(() => setLoading(false));
-  useEffect(() => { load(); }, []);
+  const load = () => {
+    getDrupalUsers().then(setUsers).catch(() => {}).finally(() => setLoading(false));
+  };
+  useEffect(() => { if (isDrupalConfigured()) load(); else setLoading(false); }, []);
+
+  if (!isDrupalConfigured()) return <AdminLayout><DrupalNotConfigured /></AdminLayout>;
 
   if (me?.role !== "admin") {
     return (
@@ -35,37 +38,38 @@ export default function Users() {
     );
   }
 
-  const deleteUser = async (id: number) => {
-    if (id === me?.id) { alert("You cannot delete your own account."); return; }
+  const handleDelete = async (user: DrupalUser) => {
+    if (user.id === me?.id) { alert("You cannot delete your own account."); return; }
     if (!confirm("Delete this user? This cannot be undone.")) return;
-    setDeleting(id);
-    try { await api.delete(`/users/${id}`); setUsers(prev => prev.filter(u => u.id !== id)); }
+    setDeleting(user.id);
+    try { await deleteDrupalUser(user.id); setUsers(prev => prev.filter(u => u.id !== user.id)); }
     catch (err: any) { alert(err.message || "Failed to delete user"); }
     finally { setDeleting(null); }
   };
 
-  const toggleRole = async (user: UserRow) => {
-    const newRole = user.role === "admin" ? "contributor" : "admin";
+  const handleToggleRole = async (user: DrupalUser) => {
     if (user.id === me?.id) { alert("You cannot change your own role."); return; }
+    const newRole = user.roles.includes("administrator") ? "contributor" : "administrator";
     setUpdatingRole(user.id);
     try {
-      const updated = await api.put<UserRow>(`/users/${user.id}`, { role: newRole });
-      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, role: updated.role } : u));
+      const updated = await setDrupalUserRole(user.id, newRole as "administrator" | "contributor");
+      setUsers(prev => prev.map(u => u.id === user.id ? updated : u));
     } catch (err: any) { alert(err.message || "Failed to update role"); }
     finally { setUpdatingRole(null); }
   };
 
-  const approveUser = async (user: UserRow) => {
+  const handleApprove = async (user: DrupalUser) => {
     setApproving(user.id);
     try {
-      const updated = await api.post<UserRow>(`/users/${user.id}/approve`, {});
-      setUsers(prev => prev.map(u => u.id === user.id ? { ...u, status: updated.status } : u));
+      const updated = await approveDrupalUser(user.id);
+      setUsers(prev => prev.map(u => u.id === user.id ? updated : u));
     } catch (err: any) { alert(err.message || "Failed to approve user"); }
     finally { setApproving(null); }
   };
 
   const pending = users.filter(u => u.status === "pending");
   const displayed = tab === "pending" ? pending : users;
+  const isAdmin = (u: DrupalUser) => u.roles.includes("administrator");
 
   return (
     <AdminLayout>
@@ -82,7 +86,6 @@ export default function Users() {
           )}
         </div>
 
-        {/* Tabs */}
         <div className="flex gap-1 mb-5 p-1 bg-muted rounded-lg w-fit">
           {(["all", "pending"] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
@@ -107,8 +110,8 @@ export default function Users() {
                 "px-4 py-3.5 bg-card/60 flex items-center gap-4",
                 user.status === "pending" && "border-yellow-500/20"
               )}>
-                {user.profilePicture ? (
-                  <img src={user.profilePicture} alt={user.username} className="w-9 h-9 rounded-full object-cover border border-border shrink-0" />
+                {user.avatar ? (
+                  <img src={user.avatar} alt={user.username} className="w-9 h-9 rounded-full object-cover border border-border shrink-0" />
                 ) : (
                   <div className="w-9 h-9 rounded-full bg-muted border border-border flex items-center justify-center shrink-0">
                     <User className="w-4 h-4 text-muted-foreground" />
@@ -131,23 +134,25 @@ export default function Users() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0 flex-wrap">
                   {user.status === "pending" && (
-                    <button onClick={() => approveUser(user)} disabled={approving === user.id}
+                    <button onClick={() => handleApprove(user)} disabled={approving === user.id}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-green-500/10 text-green-400 border border-green-500/30 hover:bg-green-500/20 transition-all">
                       {approving === user.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
                       Approve
                     </button>
                   )}
-                  <button onClick={() => toggleRole(user)} disabled={updatingRole === user.id || user.id === me?.id}
-                    title={user.id === me?.id ? "Cannot change own role" : `Set as ${user.role === "admin" ? "contributor" : "admin"}`}
+                  <button
+                    onClick={() => handleToggleRole(user)}
+                    disabled={updatingRole === user.id || user.id === me?.id}
+                    title={user.id === me?.id ? "Cannot change own role" : `Set as ${isAdmin(user) ? "contributor" : "administrator"}`}
                     className={cn(
                       "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all border",
-                      user.role === "admin" ? "bg-primary/10 text-primary border-primary/30 hover:bg-primary/20" : "bg-muted text-muted-foreground border-border hover:text-foreground",
+                      isAdmin(user) ? "bg-primary/10 text-primary border-primary/30 hover:bg-primary/20" : "bg-muted text-muted-foreground border-border hover:text-foreground",
                       user.id === me?.id && "opacity-50 cursor-not-allowed"
                     )}>
                     {updatingRole === user.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Shield className="w-3 h-3" />}
-                    {user.role}
+                    {isAdmin(user) ? "admin" : "contributor"}
                   </button>
-                  <button onClick={() => deleteUser(user.id)} disabled={deleting === user.id || user.id === me?.id}
+                  <button onClick={() => handleDelete(user)} disabled={deleting === user.id || user.id === me?.id}
                     title={user.id === me?.id ? "Cannot delete own account" : "Delete user"}
                     className="p-1.5 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors disabled:opacity-40">
                     {deleting === user.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
