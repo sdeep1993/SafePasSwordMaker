@@ -1,0 +1,1 @@
+- [Drupal headless setup](drupal-setup-decisions.md) — SafePassWordmaker uses Drupal JSON:API exclusively; no Express API used by frontend.
